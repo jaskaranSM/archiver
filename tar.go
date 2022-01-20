@@ -13,6 +13,22 @@ import (
 	"strings"
 )
 
+//Progress progress hack
+type Progress struct {
+	completed int64
+}
+
+func (p *Progress) Write(b []byte) (int, error) {
+	n := len(b)
+	p.completed += int64(n)
+	return n, nil
+}
+
+//Get get current state
+func (p *Progress) Get() int64 {
+	return p.completed
+}
+
 // Tar provides facilities for operating TAR archives.
 // See http://www.gnu.org/software/tar/manual/html_node/Standard.html.
 type Tar struct {
@@ -45,8 +61,9 @@ type Tar struct {
 	// the operation will continue on remaining files.
 	ContinueOnError bool
 
-	tw *tar.Writer
-	tr *tar.Reader
+	tw  *tar.Writer
+	tr  *tar.Reader
+	Prg *Progress
 
 	readerWrapFn  func(io.Reader) (io.Reader, error)
 	writerWrapFn  func(io.Writer) (io.Writer, error)
@@ -364,7 +381,7 @@ func (t *Tar) Write(f File) error {
 		if f.ReadCloser == nil {
 			return fmt.Errorf("%s: no way to read file contents", f.Name())
 		}
-		_, err := io.Copy(t.tw, f)
+		_, err := io.Copy(t.tw, io.TeeReader(f, t.Prg))
 		if err != nil {
 			return fmt.Errorf("%s: copying contents: %v", f.Name(), err)
 		}
